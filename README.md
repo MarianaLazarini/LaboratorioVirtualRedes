@@ -75,4 +75,4 @@ Pedro Batista
 
 ---
 
-## 📄 Licença: Projeto desenvolvido para fins acadêmicos e educacionais.
+📄 Licença: Projeto desenvolvido para fins acadêmicos e educacionais.
