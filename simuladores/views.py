@@ -23,3 +23,11 @@ def diafonia(request):
 def atenuacao(request):
     """Simulador de Atenuação por Distância"""
     return render(request, 'simuladores/atenuacao.html')
+
+def emi_industrial(request):
+    """Simulador de EMI Industrial (Cabo Blindado vs. Fibra)"""
+    return render(request, 'simuladores/emi.html')
+
+def Recuperacao_de_erros(request):
+    """Simulador de recuperacao de erros de transmissão"""
+    return render(request, 'simuladores/retransmissor.html')

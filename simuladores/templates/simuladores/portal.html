@@ -97,12 +97,14 @@
     </header>
 
     <nav id="navMenu">
-        <button onclick="loadSim('{% url "simuladores:espectro" %}', this)">Espectro EMI/RFI</button>
-        <button onclick="loadSim('{% url "simuladores:canais_wifi" %}', this)">Canais Wi-Fi</button>
-        <button onclick="loadSim('{% url "simuladores:atenuacao" %}', this)">Atenuação (Distância)</button>
-        <button onclick="loadSim('{% url "simuladores:mapa_calor" %}', this)">Atenuação (Mapa de calor)</button>
-        <button onclick="loadSim('{% url "simuladores:diafonia" %}', this)">Diafonia (Crosstalk)</button>
-    </nav>
+    <button onclick="loadSim('{% url "simuladores:espectro" %}', this)">Espectro EMI/RFI</button>
+    <button onclick="loadSim('{% url "simuladores:canais_wifi" %}', this)">Canais Wi-Fi</button>
+    <button onclick="loadSim('{% url "simuladores:atenuacao" %}', this)">Atenuação (Distância)</button>
+    <button onclick="loadSim('{% url "simuladores:mapa_calor" %}', this)">Atenuação (Site Survey)</button>
+    <button onclick="loadSim('{% url "simuladores:diafonia" %}', this)">Diafonia (Crosstalk)</button>
+    <button onclick="loadSim('{% url "simuladores:emi_industrial" %}', this)">EMI Industrial</button>
+    <button onclick="loadSim('{% url "simuladores:retransmissor" %}', this)">Retransmissor de erro</button>
+</nav>
 
     <main>
         <div class="simulator-container">

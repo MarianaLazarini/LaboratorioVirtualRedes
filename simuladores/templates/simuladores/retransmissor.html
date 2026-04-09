@@ -1,0 +1,451 @@
+
+<style>
+  :root { --blue-bg: #E6F1FB; --blue-border: #185FA5; --blue-text: #0C447C; --amber-bg: #FAEEDA; --amber-border: #BA7517; --amber-text: #633806; --red-bg: #FCEBEB; --red-border: #A32D2D; --red-text: #791F1F; --green-bg: #EAF3DE; --green-border: #3B6D11; --green-text: #27500A; --gray-bg: #F1EFE8; --gray-border: #5F5E5A; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body, #root { font-family: var(--font-sans, sans-serif); }
+  #sim { padding: 1rem 0; }
+  .header-row { display: flex; gap: 12px; margin-bottom: 1rem; flex-wrap: wrap; }
+  .metric { background: var(--color-background-secondary); border-radius: var(--border-radius-md, 8px); padding: .75rem 1rem; flex: 1; min-width: 100px; }
+  .metric-label { font-size: 12px; color: var(--color-text-secondary); margin-bottom: 4px; }
+  .metric-value { font-size: 22px; font-weight: 500; color: var(--color-text-primary); }
+  .metric-unit { font-size: 13px; color: var(--color-text-secondary); font-weight: 400; }
+  .canvas-wrap { background: var(--color-background-secondary); border-radius: var(--border-radius-lg, 12px); border: 0.5px solid var(--color-border-tertiary); padding: 0; overflow: hidden; position: relative; }
+  canvas { display: block; width: 100%; }
+  .controls { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; margin-top: 1rem; padding: .75rem 1rem; background: var(--color-background-secondary); border-radius: var(--border-radius-lg); border: 0.5px solid var(--color-border-tertiary); }
+  .ctrl-group { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 220px; }
+  .ctrl-label { font-size: 13px; color: var(--color-text-secondary); white-space: nowrap; }
+  input[type=range] { flex: 1; }
+  .ctrl-val { font-size: 13px; font-weight: 500; min-width: 36px; text-align: right; color: var(--color-text-primary); }
+  .btn-restart { padding: 8px 18px; border: 0.5px solid var(--color-border-secondary); border-radius: var(--border-radius-md); background: transparent; color: var(--color-text-primary); font-size: 13px; cursor: pointer; font-family: inherit; }
+  .btn-restart:hover { background: var(--color-background-secondary); }
+  .log-wrap { margin-top: .75rem; background: var(--color-background-secondary); border-radius: var(--border-radius-lg); border: 0.5px solid var(--color-border-tertiary); padding: .75rem 1rem; max-height: 130px; overflow-y: auto; }
+  .log-title { font-size: 12px; color: var(--color-text-secondary); margin-bottom: 6px; }
+  .log-entry { font-size: 12px; line-height: 1.7; color: var(--color-text-secondary); font-family: var(--font-mono, monospace); }
+  .log-entry.ok { color: var(--color-text-success); }
+  .log-entry.drop { color: var(--color-text-danger); }
+  .log-entry.retx { color: var(--color-text-warning); }
+  .status-bar { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--color-text-secondary); padding: .5rem 1rem .25rem; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--color-background-success); display: inline-block; }
+  .status-dot.warn { background: #EF9F27; }
+  .status-dot.err { background: #E24B4A; }
+</style>
+
+<div id="sim">
+  <div class="header-row">
+    <div class="metric"><div class="metric-label">Throughput útil</div><div class="metric-value" id="m-tput">0.0<span class="metric-unit"> pkt/s</span></div></div>
+    <div class="metric"><div class="metric-label">Drops (FCS)</div><div class="metric-value" id="m-drops" style="color:var(--color-text-danger)">0</div></div>
+    <div class="metric"><div class="metric-label">Retransmissões (TCP)</div><div class="metric-value" id="m-retx" style="color:var(--color-text-warning)">0</div></div>
+    <div class="metric"><div class="metric-label">RTT médio</div><div class="metric-value" id="m-rtt">0<span class="metric-unit"> ms</span></div></div>
+  </div>
+
+  <div class="canvas-wrap">
+    <div class="status-bar"><span class="status-dot" id="status-dot"></span><span id="status-text">Canal limpo — FCS OK</span></div>
+    <canvas id="net-canvas" height="200"></canvas>
+  </div>
+
+  <div class="controls">
+    <div class="ctrl-group">
+      <span class="ctrl-label">Ruído físico (EMI)</span>
+      <input type="range" min="0" max="95" step="1" value="15" id="sl-noise">
+      <span class="ctrl-val" id="lbl-noise">15%</span>
+    </div>
+    <div class="ctrl-group">
+      <span class="ctrl-label">Velocidade</span>
+      <input type="range" min="1" max="5" step="1" value="2" id="sl-speed">
+      <span class="ctrl-val" id="lbl-speed">2×</span>
+    </div>
+    <button class="btn-restart" id="btn-restart">↺ Reiniciar</button>
+  </div>
+
+  <div class="log-wrap">
+    <div class="log-title">Log de eventos</div>
+    <div id="log-body"></div>
+  </div>
+</div>
+
+<script>
+(function() {
+  const canvas = document.getElementById('net-canvas');
+  const ctx = canvas.getContext('2d');
+  const isDark = () => matchMedia('(prefers-color-scheme: dark)').matches;
+
+  // Layout
+  const W = 680, H = 200;
+  canvas.width = W; canvas.height = H;
+
+  // State
+  let noise = 15, speedMult = 2;
+  let packets = [];
+  let stats = { drops: 0, retx: 0, delivered: 0, rttSum: 0, rttCount: 0 };
+  let seqNum = 1;
+  let lastSpawnTime = 0;
+  let spawnInterval = 1200;
+  let animId = null;
+  let lastTs = null;
+  let logEntries = [];
+
+  // Node positions
+  const TX = { x: 80, y: 100, w: 100, h: 70 };
+  const MED = { x: 290, y: 85, w: 100, h: 30 };
+  const RX = { x: 520, y: 100, w: 100, h: 70 };
+  const CHAN_Y = 100;
+  const CHAN_X1 = TX.x + TX.w;
+  const CHAN_X2 = RX.x;
+
+  function colorOf(key) {
+    const d = isDark();
+    const map = {
+      bg: d ? '#1e1e1c' : '#f9f8f5',
+      node_bg: d ? '#2c2c2a' : '#ffffff',
+      node_border: d ? '#5F5E5A' : '#B4B2A9',
+      node_title: d ? '#e8e6de' : '#2C2C2A',
+      node_sub: d ? '#9c9a92' : '#73726c',
+      chan_line: d ? '#44443f' : '#d3d1c7',
+      pkt_ok: d ? '#1D9E75' : '#1D9E75',
+      pkt_ok_bg: d ? '#085041' : '#E1F5EE',
+      pkt_err: d ? '#E24B4A' : '#E24B4A',
+      pkt_err_bg: d ? '#501313' : '#FCEBEB',
+      pkt_retx: d ? '#EF9F27' : '#BA7517',
+      pkt_retx_bg: d ? '#412402' : '#FAEEDA',
+      pkt_transit: d ? '#378ADD' : '#185FA5',
+      pkt_transit_bg: d ? '#042C53' : '#E6F1FB',
+      noise_fill: d ? 'rgba(226,75,74,0.08)' : 'rgba(226,75,74,0.06)',
+      ack: d ? '#5DCAA5' : '#0F6E56',
+      timer_active: d ? '#EF9F27' : '#BA7517',
+      timer_bg: d ? 'rgba(239,159,39,0.2)' : 'rgba(186,117,23,0.12)',
+    };
+    return map[key] || '#888';
+  }
+
+  // Packet factory
+  function spawnPacket() {
+    const seq = seqNum++;
+    const dropProb = noise / 100;
+    const willDrop = Math.random() < dropProb;
+    packets.push({
+      id: Date.now() + Math.random(),
+      seq,
+      x: CHAN_X1,
+      targetX: willDrop ? CHAN_X1 + (CHAN_X2 - CHAN_X1) * (0.3 + Math.random() * 0.4) : CHAN_X2,
+      y: CHAN_Y,
+      speed: (60 + Math.random() * 20) * speedMult,
+      state: 'transit', // transit | dropped | acked | retransmit
+      willDrop,
+      dropX: willDrop ? CHAN_X1 + (CHAN_X2 - CHAN_X1) * (0.3 + Math.random() * 0.4) : null,
+      spawnedAt: lastTs || 0,
+      opacity: 1,
+      ackProgress: 0,
+      timerElapsed: 0,
+      isRetransmit: false,
+    });
+  }
+
+  function addLog(msg, type) {
+    logEntries.unshift({ msg, type });
+    if (logEntries.length > 80) logEntries.pop();
+    renderLog();
+  }
+
+  function renderLog() {
+    const el = document.getElementById('log-body');
+    el.innerHTML = logEntries.slice(0, 30).map(e =>
+      `<div class="log-entry ${e.type}">${e.msg}</div>`
+    ).join('');
+  }
+
+  function updateMetrics(dt) {
+    const elapsed = (lastTs || 0) / 1000;
+    const tput = elapsed > 0 ? (stats.delivered / elapsed).toFixed(1) : '0.0';
+    document.getElementById('m-tput').innerHTML = tput + '<span class="metric-unit"> pkt/s</span>';
+    document.getElementById('m-drops').textContent = stats.drops;
+    document.getElementById('m-retx').textContent = stats.retx;
+    const rtt = stats.rttCount > 0 ? Math.round(stats.rttSum / stats.rttCount) : 0;
+    document.getElementById('m-rtt').innerHTML = rtt + '<span class="metric-unit"> ms</span>';
+
+    // Status bar
+    const dot = document.getElementById('status-dot');
+    const txt = document.getElementById('status-text');
+    if (noise < 20) { dot.className = 'status-dot'; txt.textContent = 'Canal limpo — FCS OK em todos os pacotes'; }
+    else if (noise < 55) { dot.className = 'status-dot warn'; txt.textContent = `Interferência moderada — CRC rejeitando ~${Math.round(noise)}% dos quadros`; }
+    else { dot.className = 'status-dot err'; txt.textContent = `Alta EMI — canal degradado, TCP em retransmissão contínua`; }
+  }
+
+  // Timer/RTO: rough estimate
+  const RTO_MS = 800;
+
+  function drawNode(x, y, w, h, title, sub, isActive) {
+    const r = 8;
+    ctx.save();
+    ctx.beginPath();
+    ctx.roundRect(x, y - h/2, w, h, r);
+    ctx.fillStyle = colorOf('node_bg');
+    ctx.fill();
+    ctx.strokeStyle = isActive ? colorOf('pkt_transit') : colorOf('node_border');
+    ctx.lineWidth = isActive ? 1.5 : 0.5;
+    ctx.stroke();
+    ctx.fillStyle = colorOf('node_title');
+    ctx.font = '500 13px ' + (document.body.style.fontFamily || 'sans-serif');
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(title, x + w/2, y - 10);
+    ctx.fillStyle = colorOf('node_sub');
+    ctx.font = '11px ' + (document.body.style.fontFamily || 'sans-serif');
+    ctx.fillText(sub, x + w/2, y + 8);
+    ctx.restore();
+  }
+
+  function drawMedium() {
+    // Channel line
+    ctx.save();
+    ctx.strokeStyle = colorOf('chan_line');
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6, 4]);
+    ctx.beginPath();
+    ctx.moveTo(CHAN_X1, CHAN_Y);
+    ctx.lineTo(CHAN_X2, CHAN_Y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Noise overlay (fill background proportional to noise)
+    if (noise > 0) {
+      const nw = (CHAN_X2 - CHAN_X1) * (noise / 100);
+      ctx.fillStyle = colorOf('noise_fill');
+      ctx.fillRect(CHAN_X1, CHAN_Y - 22, CHAN_X2 - CHAN_X1, 44);
+      // noise sparks
+      for (let i = 0; i < Math.floor(noise / 8); i++) {
+        const sx = CHAN_X1 + 20 + (i * 37 + Math.sin(Date.now() / 400 + i) * 12) % (CHAN_X2 - CHAN_X1 - 40);
+        const sy = CHAN_Y + (Math.sin(Date.now() / 300 + i * 1.7) * 12);
+        ctx.beginPath();
+        ctx.arc(sx, sy, 1.5, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(226,75,74,${0.3 + Math.sin(Date.now()/200+i)*0.15})`;
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+
+    // Medium label
+    ctx.save();
+    ctx.fillStyle = colorOf('node_sub');
+    ctx.font = '11px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('canal físico (EMI)', (CHAN_X1 + CHAN_X2) / 2, CHAN_Y - 28);
+    ctx.restore();
+  }
+
+  // TCP timer bar above TX node
+  function drawTimerBar(pkt) {
+    if (!pkt || pkt.state !== 'waiting') return;
+    const progress = Math.min(pkt.timerElapsed / RTO_MS, 1);
+    const bw = TX.w - 16, bh = 5;
+    const bx = TX.x + 8, by = TX.y - TX.h/2 - 14;
+    ctx.save();
+    ctx.beginPath();
+    ctx.roundRect(bx, by, bw, bh, 2);
+    ctx.fillStyle = colorOf('node_border');
+    ctx.fill();
+    ctx.beginPath();
+    ctx.roundRect(bx, by, bw * progress, bh, 2);
+    ctx.fillStyle = colorOf('timer_active');
+    ctx.fill();
+    ctx.fillStyle = colorOf('timer_active');
+    ctx.font = '10px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('TIMER TCP', bx, by - 7);
+    ctx.restore();
+  }
+
+  function drawPacket(p) {
+    const size = 22;
+    const r = 5;
+    let bg, border, textCol;
+    if (p.state === 'transit') { bg = colorOf('pkt_transit_bg'); border = colorOf('pkt_transit'); textCol = colorOf('pkt_transit'); }
+    else if (p.state === 'dropped') { bg = colorOf('pkt_err_bg'); border = colorOf('pkt_err'); textCol = colorOf('pkt_err'); }
+    else if (p.state === 'acked') { bg = colorOf('pkt_ok_bg'); border = colorOf('pkt_ok'); textCol = colorOf('pkt_ok'); }
+    else if (p.state === 'retransmit') { bg = colorOf('pkt_retx_bg'); border = colorOf('pkt_retx'); textCol = colorOf('pkt_retx'); }
+    else { bg = colorOf('pkt_transit_bg'); border = colorOf('pkt_transit'); textCol = colorOf('pkt_transit'); }
+
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, p.opacity);
+    ctx.beginPath();
+    ctx.roundRect(p.x - size/2, p.y - size/2, size, size, r);
+    ctx.fillStyle = bg;
+    ctx.fill();
+    ctx.strokeStyle = border;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.fillStyle = textCol;
+    ctx.font = '500 10px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('S' + p.seq, p.x, p.y);
+    ctx.restore();
+
+    // ACK arrow (traveling back)
+    if (p.state === 'acked' && p.ackProgress > 0 && p.ackProgress < 1) {
+      const ax = RX.x - (RX.x - (CHAN_X1 + 10)) * p.ackProgress;
+      ctx.save();
+      ctx.globalAlpha = 0.7;
+      ctx.beginPath();
+      ctx.arc(ax, CHAN_Y + 14, 5, 0, Math.PI * 2);
+      ctx.fillStyle = colorOf('ack');
+      ctx.fill();
+      ctx.fillStyle = colorOf('ack');
+      ctx.font = '8px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('ACK', ax, CHAN_Y + 14);
+      ctx.restore();
+    }
+  }
+
+  function frame(ts) {
+    if (!lastTs) lastTs = ts;
+    const dt = Math.min((ts - lastTs) * speedMult, 100);
+    lastTs = ts;
+
+    // Spawn
+    const si = Math.max(200, spawnInterval / speedMult);
+    if (ts - lastSpawnTime > si) {
+      spawnPacket();
+      lastSpawnTime = ts;
+    }
+
+    // Update packets
+    let waitingPkt = null;
+    packets.forEach(p => {
+      if (p.state === 'transit') {
+        p.x += p.speed * dt / 1000;
+        if (p.willDrop && p.x >= p.dropX) {
+          p.state = 'dropped';
+          p.x = p.dropX;
+          stats.drops++;
+          addLog(`[FCS] SEQ${p.seq} — CRC reprovado, quadro descartado`, 'drop');
+          // Start TCP waiting timer on a "virtual" waiting packet linked to this drop
+          p.timerElapsed = 0;
+          p.waitState = true;
+        } else if (!p.willDrop && p.x >= CHAN_X2) {
+          p.state = 'acked';
+          p.x = CHAN_X2;
+          stats.delivered++;
+          const rtt = Math.round((ts - p.spawnedAt));
+          stats.rttSum += rtt; stats.rttCount++;
+          const label = p.isRetransmit ? `[TCP] SEQ${p.seq} ✓ entregue (retransmissão), RTT=${rtt}ms` : `[TCP] SEQ${p.seq} ✓ entregue, RTT=${rtt}ms`;
+          addLog(label, 'ok');
+          p.ackProgress = 0.01;
+        }
+      }
+      if (p.state === 'dropped' && p.waitState) {
+        p.timerElapsed += dt;
+        waitingPkt = p;
+        if (p.timerElapsed >= RTO_MS) {
+          p.waitState = false;
+          p.opacity = 0;
+          // retransmit
+          stats.retx++;
+          addLog(`[TCP] SEQ${p.seq} — RTO expirado, retransmitindo...`, 'retx');
+          packets.push({
+            id: Date.now() + Math.random(),
+            seq: p.seq,
+            x: CHAN_X1,
+            targetX: CHAN_X2,
+            y: CHAN_Y,
+            speed: (60 + Math.random() * 20) * speedMult,
+            state: 'retransmit',
+            willDrop: Math.random() < (noise / 100),
+            dropX: null,
+            spawnedAt: ts,
+            opacity: 1,
+            ackProgress: 0,
+            timerElapsed: 0,
+            isRetransmit: true,
+          });
+          // fix dropX for retransmit
+          const last = packets[packets.length - 1];
+          if (last.willDrop) last.dropX = CHAN_X1 + (CHAN_X2 - CHAN_X1) * (0.3 + Math.random() * 0.4);
+        }
+      }
+      if ((p.state === 'retransmit') && p.state !== 'acked') {
+        p.x += p.speed * dt / 1000;
+        if (p.willDrop && p.dropX && p.x >= p.dropX) {
+          p.state = 'dropped';
+          p.x = p.dropX;
+          stats.drops++;
+          addLog(`[FCS] SEQ${p.seq} (retx) — CRC reprovado novamente`, 'drop');
+          p.timerElapsed = 0;
+          p.waitState = true;
+        } else if (!p.willDrop && p.x >= CHAN_X2) {
+          p.state = 'acked';
+          p.x = CHAN_X2;
+          stats.delivered++;
+          const rtt = Math.round((ts - p.spawnedAt));
+          stats.rttSum += rtt; stats.rttCount++;
+          addLog(`[TCP] SEQ${p.seq} ✓ entregue (retransmissão), RTT=${rtt}ms`, 'ok');
+          p.ackProgress = 0.01;
+        }
+      }
+      if (p.state === 'acked' && p.ackProgress > 0) {
+        p.ackProgress += dt / 600;
+        if (p.ackProgress >= 1) {
+          p.ackProgress = 1;
+          p.opacity -= dt / 500;
+        }
+      }
+      if (p.state === 'dropped' && !p.waitState) {
+        p.opacity -= dt / 400;
+      }
+    });
+
+    // GC old packets
+    packets = packets.filter(p => p.opacity > 0);
+
+    // Draw
+    ctx.clearRect(0, 0, W, H);
+
+    // Active state check
+    const txActive = packets.some(p => p.state === 'transit' || p.state === 'retransmit');
+    const rxActive = packets.some(p => p.state === 'acked');
+
+    drawMedium();
+    drawNode(TX.x, TX.y, TX.w, TX.h, 'Computador A', '(TX)', txActive);
+    drawNode(RX.x, RX.y, RX.w, RX.h, 'Computador B', '(RX)', rxActive);
+
+    // Timer bar for first waiting packet
+    const wp = packets.find(p => p.waitState);
+    drawTimerBar(wp);
+
+    packets.forEach(p => drawPacket(p));
+
+    updateMetrics(dt);
+    animId = requestAnimationFrame(frame);
+  }
+
+  function reset() {
+    packets = [];
+    stats = { drops: 0, retx: 0, delivered: 0, rttSum: 0, rttCount: 0 };
+    seqNum = 1;
+    lastSpawnTime = 0;
+    lastTs = null;
+    logEntries = [];
+    renderLog();
+    document.getElementById('m-tput').innerHTML = '0.0<span class="metric-unit"> pkt/s</span>';
+    document.getElementById('m-drops').textContent = '0';
+    document.getElementById('m-retx').textContent = '0';
+    document.getElementById('m-rtt').innerHTML = '0<span class="metric-unit"> ms</span>';
+  }
+
+  document.getElementById('sl-noise').addEventListener('input', function() {
+    noise = +this.value;
+    document.getElementById('lbl-noise').textContent = noise + '%';
+  });
+  document.getElementById('sl-speed').addEventListener('input', function() {
+    speedMult = +this.value;
+    document.getElementById('lbl-speed').textContent = speedMult + '×';
+  });
+  document.getElementById('btn-restart').addEventListener('click', () => { reset(); });
+
+  if (animId) cancelAnimationFrame(animId);
+  requestAnimationFrame(frame);
+})();
+</script>

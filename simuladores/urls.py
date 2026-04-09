@@ -10,4 +10,6 @@ urlpatterns = [
     path('mapa-calor/', views.mapa_calor, name='mapa_calor'),
     path('diafonia/', views.diafonia, name='diafonia'),
     path('atenuacao/', views.atenuacao, name='atenuacao'),
+    path('emi-industrial/', views.emi_industrial, name='emi_industrial'),
+    path('retransmissor/', views.Recuperacao_de_erros, name='retransmissor'),
 ]

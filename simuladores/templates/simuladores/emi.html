@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Simulador de EMI Industrial</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #f0f4f8;
+  --surface: #ffffff;
+  --surface2: #f8fafc;
+  --border: #e2e8f0;
+  --border2: #cbd5e1;
+  --text: #1e293b;
+  --muted: #64748b;
+  --utp: #3b82f6;
+  --stp: #1e40af;
+  --fiber: #f59e0b;
+  --emi: #ef4444;
+  --good: #16a34a;
+  --warn: #d97706;
+  --bad: #dc2626;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Syne',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px;}
+
+.page{background:var(--surface);border:1px solid var(--border);border-radius:18px;padding:20px 24px;width:100%;max-width:760px;display:flex;flex-direction:column;gap:14px;box-shadow:0 4px 24px rgba(0,0,0,0.07);}
+
+/* Header */
+.header{display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:8px;}
+.header-left h1{font-size:17px;font-weight:800;color:var(--text);}
+.alert-msg{font-size:11px;font-weight:600;color:var(--bad);background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);border-radius:6px;padding:3px 10px;display:none;margin-top:4px;}
+.stat-row{display:flex;gap:16px;font-family:'JetBrains Mono',monospace;}
+.stat-item{display:flex;flex-direction:column;align-items:center;gap:1px;}
+.stat-item .sl{font-size:8px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);}
+.stat-item .sv{font-size:16px;font-weight:800;}
+
+/* Cable lanes */
+.cables-area{display:flex;flex-direction:column;gap:10px;position:relative;}
+
+.cable-row{position:relative;height:38px;}
+.cable-label{position:absolute;top:2px;left:0;z-index:10;background:var(--surface);border:1.5px solid;border-radius:20px;padding:2px 10px;font-size:10px;font-weight:700;letter-spacing:0.04em;}
+.cable-label.utp{border-color:var(--utp);color:var(--utp);}
+.cable-label.stp{border-color:var(--stp);color:var(--stp);}
+.cable-label.fiber{border-color:var(--fiber);color:var(--fiber);}
+.integrity-label{position:absolute;top:2px;right:0;font-size:11px;font-weight:800;font-family:'JetBrains Mono',monospace;}
+
+canvas.cable-canvas{position:absolute;bottom:0;left:0;width:100%;height:26px;border-radius:4px;}
+
+/* Motor area */
+.motor-area{position:relative;display:flex;flex-direction:column;align-items:center;gap:4px;}
+canvas#emiCanvas{width:100%;height:160px;display:block;}
+
+.motor-label{font-size:13px;font-weight:800;letter-spacing:0.1em;text-transform:uppercase;color:var(--text);}
+.motor-sub{font-size:10px;font-weight:600;color:var(--emi);letter-spacing:0.06em;height:14px;}
+
+/* Controls */
+.controls{display:flex;align-items:center;gap:20px;flex-wrap:wrap;border-top:1px solid var(--border);padding-top:14px;}
+.ctrl-group{display:flex;align-items:center;gap:10px;}
+.ctrl-lbl{font-size:11px;font-weight:700;color:var(--muted);}
+
+/* Toggle */
+.toggle-wrap{position:relative;width:44px;height:24px;cursor:pointer;}
+.toggle-wrap input{opacity:0;width:0;height:0;}
+.toggle-track{position:absolute;inset:0;background:#cbd5e1;border-radius:12px;transition:background 0.2s;}
+.toggle-thumb{position:absolute;top:3px;left:3px;width:18px;height:18px;background:#fff;border-radius:50%;transition:transform 0.2s;box-shadow:0 1px 4px rgba(0,0,0,0.2);}
+.toggle-wrap input:checked ~ .toggle-track{background:#3b82f6;}
+.toggle-wrap input:checked ~ .toggle-thumb{transform:translateX(20px);}
+
+/* Range slider */
+input[type=range]{-webkit-appearance:none;width:130px;height:4px;border-radius:2px;background:var(--border2);outline:none;cursor:pointer;}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--utp);border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,0.2);cursor:pointer;}
+.power-val{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:3px 9px;min-width:48px;text-align:center;}
+
+/* Info tooltip row */
+.info-row{display:flex;gap:8px;flex-wrap:wrap;}
+.info-chip{font-size:10px;font-weight:600;font-family:'JetBrains Mono',monospace;padding:4px 10px;border-radius:6px;border:1px solid;}
+.info-chip.utp{background:rgba(59,130,246,0.08);border-color:rgba(59,130,246,0.25);color:#1d4ed8;}
+.info-chip.stp{background:rgba(30,64,175,0.08);border-color:rgba(30,64,175,0.25);color:#1e3a8a;}
+.info-chip.fiber{background:rgba(245,158,11,0.08);border-color:rgba(245,158,11,0.3);color:#92400e;}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-left">
+      <h1>Simulador de EMI Industrial</h1>
+      <div class="alert-msg" id="alertMsg">⚠ O campo eletromagnético está corrompendo os dados no cabo UTP!</div>
+    </div>
+    <div class="stat-row">
+      <div class="stat-item"><span class="sl">Cabo UTP</span><span class="sv" id="svUtp" style="color:var(--good)">100%</span></div>
+      <div class="stat-item"><span class="sl">Cabo STP</span><span class="sv" id="svStp" style="color:var(--good)">100%</span></div>
+      <div class="stat-item"><span class="sl">Fibra Óptica</span><span class="sv" id="svFiber" style="color:var(--good)">100%</span></div>
+    </div>
+  </div>
+
+  <!-- Cables -->
+  <div class="cables-area">
+    <div class="cable-row" id="rowUtp">
+      <span class="cable-label utp">CABO UTP (COBRE SEM BLINDAGEM)</span>
+      <span class="integrity-label" id="intUtp" style="color:var(--good)">Integridade: 100%</span>
+      <canvas class="cable-canvas" id="cvUtp"></canvas>
+    </div>
+    <div class="cable-row" id="rowStp">
+      <span class="cable-label stp">CABO STP (COBRE BLINDADO)</span>
+      <span class="integrity-label" id="intStp" style="color:var(--good)">Integridade: 100%</span>
+      <canvas class="cable-canvas" id="cvStp"></canvas>
+    </div>
+    <div class="cable-row" id="rowFiber">
+      <span class="cable-label fiber">FIBRA ÓPTICA (IMUNE A EMI)</span>
+      <span class="integrity-label" id="intFiber" style="color:var(--good)">Integridade: 100%</span>
+      <canvas class="cable-canvas" id="cvFiber"></canvas>
+    </div>
+  </div>
+
+  <!-- EMI canvas -->
+  <div class="motor-area">
+    <canvas id="emiCanvas"></canvas>
+    <div class="motor-label" id="motorLabel">MOTOR INDUSTRIAL</div>
+    <div class="motor-sub" id="motorSub"></div>
+  </div>
+
+  <!-- Controls -->
+  <div class="controls">
+    <div class="ctrl-group">
+      <span class="ctrl-lbl">Ligar Motor Industrial</span>
+      <label class="toggle-wrap">
+        <input type="checkbox" id="motorToggle">
+        <div class="toggle-track"></div>
+        <div class="toggle-thumb"></div>
+      </label>
+    </div>
+    <div class="ctrl-group">
+      <span class="ctrl-lbl">Potência do Motor</span>
+      <input type="range" id="powerSlider" min="0.1" max="1" step="0.05" value="0.1">
+      <div class="power-val" id="powerVal">0,1</div>
+    </div>
+  </div>
+
+  <!-- Info chips -->
+  <div class="info-row">
+    <div class="info-chip utp">UTP: sem blindagem → absorve EMI diretamente</div>
+    <div class="info-chip stp">STP: malha metálica → atenua ~20–40 dB de EMI</div>
+    <div class="info-chip fiber">Fibra: sinal óptico → imune a campos EM</div>
+  </div>
+
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+let motorOn   = false;
+let power     = 0.1;   // 0.1 → 1.0
+let animFrame = 0;
+let t         = 0;     // global time ticker
+
+// ── Physics model ─────────────────────────────────────────────────────────
+// EMI coupling model (physics-based):
+//
+// UTP (unshielded):
+//   No shielding. Couples proportional to B-field strength.
+//   Noise voltage: Vn ≈ k · f · B · A   (Faraday's law)
+//   We model integrity = 1 - (power^1.5 * utpCoupling)
+//   Coupling factor ~0.65–0.9 at full power
+//
+// STP (shielded twisted pair):
+//   Transfer impedance of shield ~0.01–0.1 Ω/m at low freq
+//   Shielding effectiveness (SE) ≈ 20–40 dB → reduces noise by factor 10–100x
+//   integrity = 1 - (power^1.5 * utpCoupling / shieldFactor)
+//   shieldFactor ≈ 25x (≈28 dB)
+//
+// Fiber:
+//   No metallic conductor. EMI coupling = 0. Integrity = 1.0 always.
+
+const UTP_COUPLING   = 0.88;
+const STP_FACTOR     = 28;   // shielding attenuation (dimensionless ~25–30x)
+const STP_COUPLING   = UTP_COUPLING / STP_FACTOR;
+
+function calcIntegrity(type, pwr, on) {
+  if (!on) return 1.0;
+  if (type === 'fiber') return 1.0;
+  const noise = Math.pow(pwr, 1.4);
+  if (type === 'utp')   return Math.max(0, 1 - noise * UTP_COUPLING);
+  if (type === 'stp')   return Math.max(0, 1 - noise * STP_COUPLING);
+  return 1.0;
+}
+
+// Noise jitter amplitude for signal dots
+function noiseAmp(type, pwr, on) {
+  if (!on) return 0;
+  if (type === 'fiber') return 0;
+  const base = Math.pow(pwr, 1.2);
+  if (type === 'utp') return base * 9;
+  if (type === 'stp') return base * 9 / STP_FACTOR;
+  return 0;
+}
+
+// ── Canvas helpers ──────────────────────────────────────────────────────────
+function setupCanvas(cv, h) {
+  const dpr = window.devicePixelRatio || 1;
+  const w   = cv.parentElement.clientWidth;
+  cv.width  = w * dpr;
+  cv.height = h * dpr;
+  cv.style.width  = w + 'px';
+  cv.style.height = h + 'px';
+  const c = cv.getContext('2d');
+  c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { c, w, h };
+}
+
+// ── Draw cable signal ───────────────────────────────────────────────────────
+function drawCable(id, type, integ) {
+  const cv = document.getElementById(id);
+  const { c, w, h } = setupCanvas(cv, 26);
+  c.clearRect(0, 0, w, h);
+
+  const colors = { utp: '#3b82f6', stp: '#1e40af', fiber: '#f59e0b' };
+  const col    = colors[type];
+  const midY   = h / 2;
+
+  // Cable body
+  if (type === 'stp') {
+    // Shielded: double-line
+    c.strokeStyle = '#94a3b8';
+    c.lineWidth = 7;
+    c.beginPath(); c.moveTo(0, midY); c.lineTo(w, midY); c.stroke();
+    c.strokeStyle = '#dde3ec';
+    c.lineWidth = 3;
+    c.beginPath(); c.moveTo(0, midY); c.lineTo(w, midY); c.stroke();
+  } else if (type === 'fiber') {
+    // Gold cable
+    c.strokeStyle = '#fde68a';
+    c.lineWidth = 5;
+    c.beginPath(); c.moveTo(0, midY); c.lineTo(w, midY); c.stroke();
+    c.strokeStyle = '#f59e0b';
+    c.lineWidth = 2;
+    c.beginPath(); c.moveTo(0, midY); c.lineTo(w, midY); c.stroke();
+  } else {
+    c.strokeStyle = '#bfdbfe';
+    c.lineWidth = 5;
+    c.beginPath(); c.moveTo(0, midY); c.lineTo(w, midY); c.stroke();
+  }
+
+  // Data dots (packets traveling along cable)
+  const nDots = 14;
+  const amp   = noiseAmp(type, power, motorOn);
+  const intPct = Math.round(integ * 100);
+
+  for (let i = 0; i < nDots; i++) {
+    const phase  = i / nDots;
+    const xPos   = ((phase + t * 0.3) % 1) * w;
+    // jitter from EMI
+    const jitter = amp * Math.sin(t * 8 + i * 2.3) * (Math.random() * 0.3 + 0.85);
+    const yPos   = midY + jitter;
+
+    // Dot color: good=blue, degraded=yellow/red
+    let dotColor = col;
+    if (integ < 0.5 && type === 'utp') dotColor = `rgba(239,68,68,${0.6 + 0.4 * Math.random()})`;
+    else if (integ < 0.85 && type === 'utp') dotColor = `rgba(251,146,60,0.9)`;
+
+    c.beginPath();
+    c.arc(xPos, yPos, 4.5, 0, Math.PI * 2);
+    c.fillStyle = dotColor;
+    c.shadowColor = dotColor;
+    c.shadowBlur  = 6;
+    c.fill();
+    c.shadowBlur = 0;
+  }
+}
+
+// ── Draw EMI field ──────────────────────────────────────────────────────────
+function drawEmi() {
+  const cv = document.getElementById('emiCanvas');
+  const dpr = window.devicePixelRatio || 1;
+  const w   = cv.parentElement.clientWidth;
+  const h   = 160;
+  cv.width  = w * dpr;
+  cv.height = h * dpr;
+  cv.style.width  = w + 'px';
+  cv.style.height = h + 'px';
+  const c = cv.getContext('2d');
+  c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  c.clearRect(0, 0, w, h);
+
+  const cx = w / 2;
+  const cy = h * 0.52;
+
+  if (!motorOn) {
+    // Static motor icon
+    drawMotorIcon(c, cx, cy, '#94a3b8', 1.0);
+    return;
+  }
+
+  // Animated EMI rings
+  const nRings = 6;
+  for (let r = 0; r < nRings; r++) {
+    const phase     = (r / nRings + t * 0.18) % 1;
+    const radius    = phase * (w * 0.52) * power;
+    const alpha     = (1 - phase) * 0.35 * power;
+    const ringColor = `rgba(239,68,68,${alpha})`;
+
+    c.beginPath();
+    c.arc(cx, cy, radius, 0, Math.PI * 2);
+    c.strokeStyle = ringColor;
+    c.lineWidth   = 1.5 + (1 - phase) * 2 * power;
+    c.stroke();
+  }
+
+  // Lightning bolts
+  if (power > 0.3) {
+    const boltAlpha = (0.4 + 0.6 * power) * (0.7 + 0.3 * Math.sin(t * 12));
+    drawBolt(c, cx - 36, cy - 10, boltAlpha);
+    drawBolt(c, cx + 28, cy - 8, boltAlpha);
+  }
+
+  // Motor icon (active = blue)
+  drawMotorIcon(c, cx, cy, '#3b82f6', 1.0);
+
+  // Frequency indicator
+  c.font = '700 9px JetBrains Mono, monospace';
+  c.fillStyle = 'rgba(239,68,68,0.7)';
+  c.textAlign = 'center';
+  const freq = (power * 50 + 10).toFixed(0);
+  c.fillText(`~${freq} kHz · campo B = ${(power * 2.4).toFixed(1)} mT`, cx, cy + 50);
+  c.textAlign = 'left';
+}
+
+function drawBolt(c, x, y, alpha) {
+  c.save();
+  c.strokeStyle = `rgba(251,191,36,${alpha})`;
+  c.lineWidth = 2;
+  c.lineJoin = 'round';
+  c.beginPath();
+  c.moveTo(x,    y);
+  c.lineTo(x-5,  y+8);
+  c.lineTo(x+2,  y+8);
+  c.lineTo(x-4,  y+18);
+  c.stroke();
+  c.restore();
+}
+
+function drawMotorIcon(c, cx, cy, col, alpha) {
+  c.save();
+  c.globalAlpha = alpha;
+  c.strokeStyle = col;
+  c.fillStyle   = col.replace(')', `,0.12)`).replace('rgb','rgba').replace('#','');
+
+  // Use simple shapes for motor factory icon
+  const x = cx - 22, y = cy - 22;
+  // Body
+  c.fillStyle   = col + '22';
+  c.strokeStyle = col;
+  c.lineWidth   = 2;
+  c.beginPath();
+  c.roundRect(x, y + 8, 44, 28, 3);
+  c.fill(); c.stroke();
+
+  // Chimney left
+  c.beginPath();
+  c.rect(x + 4, y, 8, 10);
+  c.fill(); c.stroke();
+
+  // Chimney right
+  c.beginPath();
+  c.rect(x + 18, y + 3, 7, 7);
+  c.fill(); c.stroke();
+
+  // Windows/vents
+  c.fillStyle = col;
+  for (let i = 0; i < 3; i++) {
+    c.beginPath();
+    c.rect(x + 6 + i * 12, y + 16, 7, 6);
+    c.fill();
+  }
+
+  c.restore();
+}
+
+// ── Update labels ───────────────────────────────────────────────────────────
+function updateLabels() {
+  const iUtp   = calcIntegrity('utp',   power, motorOn);
+  const iStp   = calcIntegrity('stp',   power, motorOn);
+  const iFiber = calcIntegrity('fiber', power, motorOn);
+
+  function pctColor(v) {
+    if (v > 0.85) return '#16a34a';
+    if (v > 0.60) return '#d97706';
+    return '#dc2626';
+  }
+
+  const setLabel = (id, val) => {
+    const el = document.getElementById(id);
+    const pct = Math.round(val * 100);
+    el.textContent = `Integridade: ${pct}%`;
+    el.style.color = pctColor(val);
+  };
+  setLabel('intUtp',   iUtp);
+  setLabel('intStp',   iStp);
+  setLabel('intFiber', iFiber);
+
+  const setStat = (id, val) => {
+    const el = document.getElementById(id);
+    el.textContent = Math.round(val * 100) + '%';
+    el.style.color = pctColor(val);
+  };
+  setStat('svUtp',   iUtp);
+  setStat('svStp',   iStp);
+  setStat('svFiber', iFiber);
+
+  // Alert
+  const alertEl = document.getElementById('alertMsg');
+  if (motorOn && iUtp < 0.98) {
+    let msg = '⚠ ';
+    if (iUtp < 0.5)      msg += 'Corrupção severa de dados no cabo UTP! Pacotes perdidos.';
+    else if (iUtp < 0.80) msg += 'O campo eletromagnético está corrompendo os dados no cabo UTP!';
+    else                  msg += 'Interferência leve detectada no cabo UTP.';
+    alertEl.textContent = msg;
+    alertEl.style.display = 'block';
+  } else {
+    alertEl.style.display = motorOn ? 'none' : 'none';
+    if (!motorOn) alertEl.style.display = 'none';
+  }
+
+  // Motor sub-label
+  const subEl = document.getElementById('motorSub');
+  if (motorOn) {
+    subEl.textContent = 'EMITINDO RUÍDO EMI';
+    subEl.style.color = '#dc2626';
+  } else {
+    subEl.textContent = 'Motor desligado. Rede operando com integridade total.';
+    subEl.style.color = '#64748b';
+    subEl.style.fontSize = '10px';
+  }
+
+  // UTP label border flash
+  const rowUtp = document.getElementById('rowUtp');
+  if (motorOn && iUtp < 0.85) {
+    const pulse = 0.5 + 0.5 * Math.sin(t * 6);
+    rowUtp.querySelector('.cable-label').style.borderColor = `rgba(239,68,68,${0.5 + 0.5 * pulse})`;
+    rowUtp.querySelector('.cable-label').style.color = `rgba(239,68,68,${0.7 + 0.3 * pulse})`;
+  } else {
+    rowUtp.querySelector('.cable-label').style.borderColor = '';
+    rowUtp.querySelector('.cable-label').style.color = '';
+  }
+}
+
+// ── Main animation loop ─────────────────────────────────────────────────────
+function loop() {
+  t += 0.016;
+
+  const iUtp   = calcIntegrity('utp',   power, motorOn);
+  const iStp   = calcIntegrity('stp',   power, motorOn);
+  const iFiber = calcIntegrity('fiber', power, motorOn);
+
+  drawCable('cvUtp',   'utp',   iUtp);
+  drawCable('cvStp',   'stp',   iStp);
+  drawCable('cvFiber', 'fiber', iFiber);
+  drawEmi();
+  updateLabels();
+
+  animFrame = requestAnimationFrame(loop);
+}
+
+// ── Controls ────────────────────────────────────────────────────────────────
+document.getElementById('motorToggle').addEventListener('change', function() {
+  motorOn = this.checked;
+});
+
+document.getElementById('powerSlider').addEventListener('input', function() {
+  power = parseFloat(this.value);
+  const formatted = power.toFixed(1).replace('.', ',');
+  document.getElementById('powerVal').textContent = formatted;
+});
+
+window.addEventListener('resize', () => { /* canvases resize on next frame */ });
+
+// ── Start ────────────────────────────────────────────────────────────────────
+loop();
+</script>
+</body>
+</html>

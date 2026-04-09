@@ -5,97 +5,63 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Explorador do Espectro Eletromagnético - EMI/RFI</title>
     <style>
-        body { 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-            background-color: #1a1a1d; 
-            color: #fff; 
-            margin: 0; 
-            padding: 20px; 
-            display: flex; 
-            flex-direction: column; 
-            align-items: center; 
-        }
-        .container { 
-            max-width: 900px; 
-            width: 100%; 
-            background: #2d2d2d; 
-            padding: 30px; 
-            border-radius: 10px; 
-            box-shadow: 0 4px 15px rgba(0,0,0,0.5); 
-        }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #1a1a1d; color: #fff; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        .container { max-width: 950px; width: 100%; background: #2d2d2d; padding: 30px; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
         h1 { color: #4da6ff; text-align: center; margin-top: 0;}
         .subtitle { color: #aaa; text-align: center; margin-bottom: 30px; }
         
-        .buttons { 
-            display: flex; 
-            justify-content: center; 
-            gap: 10px; 
-            flex-wrap: wrap; 
-            margin-bottom: 30px; 
-        }
-        button { 
-            background: #444; 
-            color: white; 
-            border: 2px solid transparent; 
-            padding: 12px 20px; 
-            border-radius: 5px; 
-            cursor: pointer; 
-            font-size: 16px; 
-            transition: all 0.2s; 
-        }
+        .buttons { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
+        button { background: #444; color: white; border: 2px solid transparent; padding: 10px 15px; border-radius: 5px; cursor: pointer; font-size: 15px; font-weight: bold; transition: all 0.2s; }
         button:hover { background: #555; }
-        button.active { 
-            background: #2196f3; 
-            border-color: #fff;
-            font-weight: bold;
-        }
+        
+        /* Cores Ativas Específicas */
+        button[data-target="radio"].active { background: #10b981; border-color: #fff; }
+        button[data-target="wifi_clean"].active { background: #3b82f6; border-color: #fff; }
+        button[data-target="wifi_noise"].active { background: #ef4444; border-color: #fff; animation: pulse 1s infinite alternate;}
+        button[data-target="luz"].active { background: #f59e0b; border-color: #fff; }
 
-        /* O Canvas onde a Matemática acontece */
-        .visualizer { 
-            height: 180px; 
-            background: #0a0a0a; 
-            border-radius: 8px; 
-            border: 2px solid #444; 
-            overflow: hidden; 
-            margin-bottom: 20px; 
-            position: relative; 
-        }
-        canvas {
-            width: 100%;
-            height: 100%;
-            display: block;
-        }
+        @keyframes pulse { from { transform: scale(1); } to { transform: scale(1.05); } }
 
-        .info-panel { 
-            background: #1e1e1e; 
-            padding: 25px; 
-            border-radius: 8px; 
-            border: 1px solid #444; 
-            min-height: 180px; 
-        }
+        /* HUD - Heads Up Display (Métricas) */
+        .hud-panel { display: flex; justify-content: space-between; background: #000; padding: 10px 20px; border-radius: 8px 8px 0 0; border: 2px solid #444; border-bottom: none; }
+        .hud-item { display: flex; flex-direction: column; align-items: center; }
+        .hud-label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 1px; }
+        .hud-value { font-size: 24px; font-weight: bold; font-family: monospace; }
+        .snr-good { color: #10b981; }
+        .snr-bad { color: #ef4444; }
+
+        .visualizer { height: 200px; background: #0a0a0a; border-radius: 0 0 8px 8px; border: 2px solid #444; overflow: hidden; position: relative; margin-bottom: 20px; box-shadow: inset 0 0 20px rgba(0,0,0,0.8); }
+        canvas { width: 100%; height: 100%; display: block; }
+
+        .info-panel { background: #1e1e1e; padding: 25px; border-radius: 8px; border: 1px solid #444; min-height: 150px; }
         .info-panel h2 { margin-top: 0; color: #fff; }
         .info-panel p { color: #ccc; line-height: 1.6; }
         
-        .alert { 
-            background: rgba(255, 82, 82, 0.15); 
-            border-left: 5px solid #ff5252; 
-            padding: 15px; 
-            margin-top: 20px; 
-            border-radius: 0 4px 4px 0; 
-            display: none; 
-        }
-        .alert strong { color: #ff5252; }
+        .alert { background: rgba(239, 68, 68, 0.15); border-left: 5px solid #ef4444; padding: 15px; margin-top: 20px; border-radius: 0 4px 4px 0; display: none; }
+        .alert strong { color: #ef4444; }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>O Espectro e a Interferência (EMI/RFI)</h1>
-        <p class="subtitle">Análise matemática das ondas senoidais: Veja a diferença de frequência e como o ruído destrói o sinal.</p>
+        <p class="subtitle">Análise matemática das ondas senoidais: Compare um sinal limpo com um sinal destruído por ruído.</p>
         
         <div class="buttons" id="btn-group">
-            <button onclick="selectBand('radio', this)" class="active">Ondas de Rádio (AM/FM/TV)</button>
-            <button onclick="selectBand('microondas', this)" id="btn-micro">Micro-ondas (Wi-Fi 2.4GHz)</button>
-            <button onclick="selectBand('luz', this)">Luz Visível (Fibra Óptica)</button>
+            <button data-target="radio" onclick="selectBand('radio', this)" class="active">Rádio (AM/FM)</button>
+            <button data-target="wifi_clean" onclick="selectBand('wifi_clean', this)">Wi-Fi 2.4GHz (Sinal Limpo)</button>
+            <button data-target="wifi_noise" onclick="selectBand('wifi_noise', this)">Wi-Fi + Micro-ondas (Colisão!)</button>
+            <button data-target="luz" onclick="selectBand('luz', this)">Fibra Óptica (Luz)</button>
+        </div>
+
+        <div class="hud-panel">
+            <div class="hud-item">
+                <span class="hud-label">Integridade dos Dados (SNR)</span>
+                <span class="hud-value snr-good" id="snr-display">99.9%</span>
+            </div>
+            <div class="hud-item">
+                <span class="hud-label">Status do Meio Físico</span>
+                <span class="hud-value" id="status-display" style="color: #aaa; font-size: 18px; margin-top: 5px;">Estável</span>
+            </div>
         </div>
 
         <div class="visualizer">
@@ -104,22 +70,24 @@
 
         <div class="info-panel">
             <h2 id="band-title">Ondas de Rádio (MHz a GHz Baixo)</h2>
-            <p id="band-desc">Ondas com <strong>baixa frequência</strong> (menos oscilações) e comprimentos longos. Elas conseguem viajar longas distâncias e contornar obstáculos. Matematicamente, a curva do Seno é alongada.</p>
+            <p id="band-desc">Ondas com baixa frequência (poucas oscilações) e comprimentos longos. Viajam longas distâncias e atravessam obstáculos facilmente.</p>
             
             <div class="alert" id="interference-alert">
-                <strong>⚠️ Alerta Crítico de RFI (Interferência de Radiofrequência):</strong> 
+                <strong>⚠️ COLISÃO DE RADIOFREQUÊNCIA (RFI) DETECTADA:</strong> 
                 <br><br>
-                Nesta faixa não licenciada (2.4 GHz), o sinal perfeitamente senoidal do seu Wi-Fi é "bombardeado" pela radiação que vaza de um <strong>Forno Micro-ondas</strong> operando na mesma frequência. A matemática resultante é a soma de duas ondas, gerando esse ruído caótico que destrói a integridade dos dados e causa a perda de pacotes.
+                O forno micro-ondas opera na mesma faixa não licenciada (ISM 2.4 GHz) que o seu roteador Wi-Fi. Quando ligado, ele vaza radiação eletromagnética desordenada para o ambiente. 
+                <br><br>
+                A física é implacável: as duas ondas se somam no ar. O resultado é essa onda vermelha caótica acima. O dispositivo receptor (seu celular) não consegue mais ler o "Seno perfeito" original, resultando em perda massiva de pacotes (Integridade cai para < 20%) e lentidão severa.
             </div>
         </div>
     </div>
 
     <script>
-        // Configuração do Canvas Matemático
         const canvas = document.getElementById('waveCanvas');
         const ctx = canvas.getContext('2d');
+        const snrDisplay = document.getElementById('snr-display');
+        const statusDisplay = document.getElementById('status-display');
         
-        // Ajusta a resolução interna do canvas para não ficar borrado
         function resizeCanvas() {
             canvas.width = canvas.clientWidth;
             canvas.height = canvas.clientHeight;
@@ -128,104 +96,111 @@
         resizeCanvas();
 
         let time = 0;
-        let currentBand = 'radio'; // Estado inicial
+        let currentBand = 'radio';
 
-        // Banco de Dados de Informações
         const dataInfo = {
             'radio': {
-                title: 'Ondas de Rádio (MHz a GHz Baixo)',
-                desc: 'Ondas com baixa frequência (poucas oscilações por segundo) e comprimentos de onda muito longos. Elas viajam distâncias quilométricas e atravessam paredes grossas facilmente. A curva senoidal é longa e suave.',
-                showAlert: false
+                title: 'Ondas de Rádio (TV / Rádio AM-FM)',
+                desc: 'Ondas mais longas e de baixa frequência. A curva senoidal é alongada e suave. Não sofrem muita interferência dos equipamentos domésticos comuns.',
+                showAlert: false,
+                snr: '99.9%',
+                status: 'Estável',
+                snrClass: 'snr-good'
             },
-            'microondas': {
-                title: 'Faixa de Micro-ondas (2.4 GHz) - Com Interferência',
-                desc: 'Ondas curtas e "agitadas" (alta frequência). Matematicamente, o Seno oscila muito rápido, permitindo carregar muitos dados. É o lar do Wi-Fi e do Bluetooth.',
-                showAlert: true
+            'wifi_clean': {
+                title: 'Wi-Fi 2.4 GHz (Ambiente Ideal)',
+                desc: 'A onda do Wi-Fi possui uma frequência bem mais alta (curta e "agitada"), permitindo transportar megabits de dados por segundo. Neste cenário limpo, o Seno é perfeito e a antena do celular consegue ler os dados (0s e 1s) com facilidade.',
+                showAlert: false,
+                snr: '98.5%',
+                status: 'Transmissão Perfeita',
+                snrClass: 'snr-good'
+            },
+            'wifi_noise': {
+                title: 'Wi-Fi 2.4 GHz vs. Forno Micro-ondas',
+                desc: 'O cenário real de uma cozinha. Observe como a soma da onda do Wi-Fi com o ruído massivo do Micro-ondas destrói o padrão da onda original.',
+                showAlert: true,
+                snr: '14.2%',
+                status: 'Corrupção de Pacotes!',
+                snrClass: 'snr-bad'
             },
             'luz': {
-                title: 'Luz Visível e Infravermelho (THz)',
-                desc: 'Frequências altíssimas e comprimentos de onda minúsculos. Ao invés de irradiar pelo ar, disparamos essas "ondas de luz" por dentro de cabos de Fibra Óptica. Por ser um ambiente fechado e usar fótons, a onda é 100% imune a EMI/RFI.',
-                showAlert: false
+                title: 'Luz Visível / Infravermelho (Fibra Óptica)',
+                desc: 'Frequências altíssimas. Em vez de irradiar pelo ar sujeito a interferências, os pulsos de luz viajam confinados em um vidro espelhado. Por usar fótons confinados, a Fibra Óptica é 100% imune a motores elétricos e RFI.',
+                showAlert: false,
+                snr: '100%',
+                status: 'Imune a EMI',
+                snrClass: 'snr-good'
             }
         };
 
-        // Função principal que desenha a onda (Motor Matemático)
         function drawWave() {
-            // Limpa o quadro anterior
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
-            // Inicia o desenho da linha
             ctx.beginPath();
             ctx.lineWidth = 3;
-            
             const centerY = canvas.height / 2;
 
             for(let x = 0; x <= canvas.width; x++) {
                 let y = centerY;
 
-                // FÓRMULA MATEMÁTICA: y = Amplitude * Math.sin(x * Frequência + Tempo)
-                
                 if(currentBand === 'radio') {
-                    // Baixa frequência (0.01) e Alta Amplitude (40)
-                    ctx.strokeStyle = '#69f0ae'; // Verde
-                    y += 40 * Math.sin(x * 0.01 - time);
+                    ctx.strokeStyle = '#10b981'; // Verde
+                    y += 50 * Math.sin(x * 0.015 - time * 0.8);
                 
-                } else if (currentBand === 'microondas') {
-                    // Média/Alta frequência (0.05) e Amplitude (30)
-                    ctx.strokeStyle = '#ff5252'; // Vermelho
+                } else if (currentBand === 'wifi_clean') {
+                    ctx.strokeStyle = '#3b82f6'; // Azul
+                    y += 40 * Math.sin(x * 0.06 - time * 2);
+                
+                } else if (currentBand === 'wifi_noise') {
+                    ctx.strokeStyle = '#ef4444'; // Vermelho
                     
-                    // A onda Wi-Fi original perfeita
-                    let wifiWave = 30 * Math.sin(x * 0.05 - time * 2);
+                    // Sinal Wi-Fi Original
+                    let wifiWave = 40 * Math.sin(x * 0.06 - time * 2);
                     
-                    // O Ruído do Forno Micro-ondas (Soma de ondas caóticas)
-                    // Só adiciona ruído bruto se estiver na aba micro-ondas para simular a colisão
-                    let noise = (Math.random() - 0.5) * 20; // Ruído aleatório
-                    let harmonico = 10 * Math.sin(x * 0.3 + time * 5); // Interferência harmônica rápida
+                    // Ruído Estocástico (Aleatório) + Harmônico do Micro-ondas
+                    let noise = (Math.random() - 0.5) * 35; 
+                    let harmonico = 15 * Math.sin(x * 0.4 + time * 6); 
                     
-                    // A onda final é o sinal útil + lixo
                     y += wifiWave + noise + harmonico;
                 
                 } else if (currentBand === 'luz') {
-                    // Frequência Extremamente Alta (0.5) e Baixa Amplitude (15)
-                    ctx.strokeStyle = '#ffd740'; // Amarelo
-                    ctx.lineWidth = 2; // Linha mais fina para simular luz
-                    y += 15 * Math.sin(x * 0.5 - time * 4);
+                    ctx.strokeStyle = '#f59e0b'; // Amarelo/Dourado
+                    ctx.lineWidth = 2; 
+                    y += 15 * Math.sin(x * 0.5 - time * 5);
                 }
 
-                // Move a "caneta" para o primeiro ponto, depois desenha a linha
-                if(x === 0) {
-                    ctx.moveTo(x, y);
-                } else {
-                    ctx.lineTo(x, y);
-                }
+                if(x === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
             }
             
-            // Pinta a linha no canvas
             ctx.stroke();
 
-            // Incrementa o tempo para a onda se mover no próximo frame
+            // Adiciona variação dinâmica no medidor de SNR quando há ruído
+            if(currentBand === 'wifi_noise') {
+                let dynamicSNR = (Math.random() * 5 + 10).toFixed(1); // Oscila entre 10% e 15%
+                snrDisplay.innerText = dynamicSNR + '%';
+            }
+
             time += 0.05;
-            
-            // Pede ao navegador para desenhar o próximo frame (Loop a 60fps)
             requestAnimationFrame(drawWave);
         }
 
-        // Função de controle das abas HTML
         function selectBand(band, btn) {
-            document.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.buttons button').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
 
-            // Atualiza a variável que diz ao Canvas o que desenhar
             currentBand = band;
-
-            // Atualiza os textos de acordo com o Banco de Dados
             const info = dataInfo[band];
+            
             document.getElementById('band-title').innerText = info.title;
             document.getElementById('band-desc').innerText = info.desc;
             document.getElementById('interference-alert').style.display = info.showAlert ? 'block' : 'none';
+            
+            snrDisplay.innerText = info.snr;
+            snrDisplay.className = `hud-value ${info.snrClass}`;
+            statusDisplay.innerText = info.status;
+            statusDisplay.style.color = info.snrClass === 'snr-bad' ? '#ef4444' : '#aaa';
         }
 
-        // Inicia a animação quando a página carrega
         requestAnimationFrame(drawWave);
     </script>
 </body>
