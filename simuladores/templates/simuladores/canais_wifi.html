@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analisador de Espectro Wi-Fi 2.4GHz</title>
+    <style>
+        :root {
+            --bg-dark: #0a0a0c;
+            --bg-panel: #16161a;
+            --text-main: #e2e8f0;
+            --text-muted: #a0aec0;
+            --accent-blue: #3b82f6;
+            --accent-green: #10b981;
+            --accent-red: #ef4444;
+            --border-color: #2d3748;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 950px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        header { text-align: center; }
+        h1 { color: var(--accent-blue); margin: 0 0 5px 0; font-size: 1.8rem; }
+        .subtitle { color: var(--text-muted); margin: 0; font-size: 1rem; }
+
+        /* Painel de Controles */
+        .controls {
+            background-color: var(--bg-panel);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 20px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        .control-group { display: flex; align-items: center; gap: 10px; }
+        label { font-weight: bold; color: var(--text-muted); }
+        
+        select {
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            border: 1px solid var(--border-color);
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 14px;
+            outline: none;
+            cursor: pointer;
+        }
+
+        button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 14px;
+        }
+        .btn-add { background-color: var(--accent-blue); color: white; }
+        .btn-add:hover { background-color: #2563eb; }
+        .btn-ideal { background-color: var(--accent-green); color: white; }
+        .btn-ideal:hover { background-color: #059669; }
+        .btn-clear { background-color: transparent; color: var(--accent-red); border: 1px solid var(--accent-red); }
+        .btn-clear:hover { background-color: rgba(239, 68, 68, 0.1); }
+
+        /* Área do Gráfico (Canvas) */
+        .spectrum-display {
+            background-color: #000;
+            border: 2px solid var(--border-color);
+            border-radius: 8px;
+            position: relative;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.8);
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 300px;
+        }
+
+        /* Alerta de Interferência */
+        .alert-box {
+            background-color: rgba(239, 68, 68, 0.1);
+            border-left: 4px solid var(--accent-red);
+            padding: 15px;
+            border-radius: 0 4px 4px 0;
+            display: none; /* Escondido inicialmente */
+            align-items: center;
+            gap: 10px;
+            animation: pulseAlert 2s infinite;
+        }
+        
+        .alert-box.active { display: flex; }
+        .alert-box strong { color: var(--accent-red); }
+
+        @keyframes pulseAlert {
+            0% { background-color: rgba(239, 68, 68, 0.05); }
+            50% { background-color: rgba(239, 68, 68, 0.15); }
+            100% { background-color: rgba(239, 68, 68, 0.05); }
+        }
+
+        /* Explicação Didática */
+        .explanation {
+            background-color: var(--bg-panel);
+            border: 1px solid var(--border-color);
+            padding: 20px;
+            border-radius: 8px;
+        }
+        .explanation h3 { color: var(--accent-green); margin-top: 0; }
+        .explanation p { line-height: 1.6; margin-bottom: 10px; color: #cbd5e1; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1>Análise de Espectro Wi-Fi (2.4 GHz)</h1>
+        <p class="subtitle">Visualizador em tempo real de Interferência Co-Canal e Canal Adjacente</p>
+    </header>
+
+    <div class="controls">
+        <div class="control-group">
+            <label for="channelSelect">Canal do Roteador:</label>
+            <select id="channelSelect">
+                <script>
+                    for(let i=1; i<=13; i++) {
+                        document.write(`<option value="${i}" ${i===6 ? 'selected' : ''}>Canal ${i}</option>`);
+                    }
+                </script>
+            </select>
+        </div>
+        <button class="btn-add" id="btnAdd">Adicionar Roteador</button>
+        <button class="btn-ideal" id="btnIdeal">Cenário Ideal (1, 6, 11)</button>
+        <button class="btn-clear" id="btnClear">Limpar Gráfico</button>
+    </div>
+
+    <div class="spectrum-display">
+        <canvas id="spectrumCanvas"></canvas>
+    </div>
+
+    <div class="alert-box" id="interferenceAlert">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+        <div>
+            <strong>ALERTA DE COLISÃO (INTERFERÊNCIA):</strong> As áreas em vermelho com estática mostram onde os sinais estão se sobrepondo no ar. Isso causa corrupção de pacotes, retransmissões forçadas e lentidão na rede (lag).
+        </div>
+    </div>
+
+    <div class="explanation">
+        <h3>A Falsa Promessa dos 13 Canais</h3>
+        <p>A banda de 2.4 GHz é estreita (apenas 83 MHz de espaço total). Quando você escolhe o "Canal 6", o roteador não transmite uma linha fina; ele espalha uma onda "gorda" de 20 MHz a 22 MHz de largura. Isso significa que o sinal do Canal 6 <strong>vaza e ocupa fisicamente o espaço dos canais 4, 5, 7 e 8</strong>.</p>
+        <p>Se você colocar seu roteador no Canal 6 e seu vizinho colocar o dele no Canal 5, as duas ondas tentarão usar o mesmo espaço físico no ar ao mesmo tempo. O resultado é a interferência mostrada no gráfico acima.</p>
+        <p><strong>A Regra de Ouro:</strong> Em projetos profissionais, configuramos os Access Points exclusivamente nos canais <strong>1, 6 e 11</strong>. Eles são os únicos três canais matematicamente distantes o suficiente para que suas curvas não se toquem (Cenário Não-Sobreposto).</p>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('spectrumCanvas');
+    const ctx = canvas.getContext('2d');
+    const alertBox = document.getElementById('interferenceAlert');
+    
+    // Configurações do espectro
+    const numChannels = 13;
+    let routers = []; // Array para guardar os canais ativos
+    
+    // Cores para os roteadores
+    const colors = [
+        'rgba(59, 130, 246, 0.7)', // Blue
+        'rgba(16, 185, 129, 0.7)', // Green
+        'rgba(245, 158, 11, 0.7)', // Orange
+        'rgba(139, 92, 246, 0.7)', // Purple
+        'rgba(236, 72, 153, 0.7)'  // Pink
+    ];
+    let colorIndex = 0;
+
+    let animationId;
+    let time = 0;
+
+    // Redimensionar canvas para ficar nítido
+    function resizeCanvas() {
+        canvas.width = canvas.parentElement.clientWidth;
+        // Altura fixa em 300px
+        canvas.height = 300;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    // Motor de Renderização
+    function render() {
+        // Limpa o frame
+        ctx.fillStyle = '#050505'; // Fundo preto
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        drawGrid();
+
+        // Arrays para detectar sobreposição (Interferência)
+        // Guardaremos a soma das "alturas" de todos os sinais em cada pixel X
+        const signalSum = new Array(canvas.width).fill(0);
+
+        // Desenha a curva de cada roteador ativo
+        routers.forEach((router) => {
+            drawRouterSignal(router, signalSum);
+        });
+
+        // Desenha o efeito de colisão (ruído vermelho) onde houver sobreposição
+        drawInterference(signalSum);
+
+        // Verifica se o alerta deve ser exibido
+        checkAlert(signalSum);
+
+        time += 0.1; // Avança o tempo para a animação do jitter
+        animationId = requestAnimationFrame(render);
+    }
+
+    // Desenha o fundo (Eixo X e linhas)
+    function drawGrid() {
+        const w = canvas.width;
+        const h = canvas.height;
+        const bottomY = h - 30;
+
+        // Linha base
+        ctx.beginPath();
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 2;
+        ctx.moveTo(0, bottomY);
+        ctx.lineTo(w, bottomY);
+        ctx.stroke();
+
+        // Marcações dos 13 canais
+        ctx.fillStyle = '#888';
+        ctx.font = '12px sans-serif';
+        ctx.textAlign = 'center';
+        
+        for(let i = 1; i <= numChannels; i++) {
+            const x = getXForChannel(i);
+            
+            // Pequeno traço vertical
+            ctx.beginPath();
+            ctx.moveTo(x, bottomY);
+            ctx.lineTo(x, bottomY + 5);
+            ctx.stroke();
+            
+            // Número do canal
+            ctx.fillText(i, x, bottomY + 20);
+        }
+    }
+
+    // Converte o número do Canal para coordenada X no Canvas
+    function getXForChannel(channel) {
+        const margin = 50; // Margem nas bordas
+        const usableWidth = canvas.width - (margin * 2);
+        const spacing = usableWidth / (numChannels - 1);
+        return margin + ((channel - 1) * spacing);
+    }
+
+    // Desenha a curva de sino (máscara espectral) de um roteador
+    function drawRouterSignal(router, signalSum) {
+        const h = canvas.height;
+        const bottomY = h - 30;
+        const centerX = getXForChannel(router.channel);
+        
+        // Largura do sinal: ~4.5 canais totais (2.2 pra cada lado)
+        // 1 canal de distância = spacing
+        const spacing = (canvas.width - 100) / 12;
+        const signalWidth = spacing * 2.2; 
+        
+        // Base amplitude (altura) com um leve 'jitter' (tremor) para simular sinal vivo
+        const jitter = Math.sin(time * 5 + router.channel) * 5;
+        const maxAmplitude = 180 + jitter;
+
+        ctx.beginPath();
+        ctx.fillStyle = router.color;
+        // Modo de mistura para clarear onde as cores se sobrepõem
+        ctx.globalCompositeOperation = 'screen'; 
+
+        // Começa na base à esquerda
+        ctx.moveTo(centerX - signalWidth, bottomY);
+
+        // Desenha a curva calculando a altura ponto a ponto (Sino de Gauss/Parábola)
+        for(let x = centerX - signalWidth; x <= centerX + signalWidth; x++) {
+            // Distância do centro (0 a 1)
+            let normalizedDist = Math.abs(x - centerX) / signalWidth;
+            
+            // Fórmula para curvar: faz o topo arredondado e as bordas caírem
+            let heightPercent = Math.max(0, 1 - Math.pow(normalizedDist, 2));
+            
+            let y = bottomY - (heightPercent * maxAmplitude);
+            
+            // Salva a altura calculada neste ponto X para depois verificar colisão
+            let canvasX = Math.floor(x);
+            if (canvasX >= 0 && canvasX < canvas.width) {
+                signalSum[canvasX] += heightPercent; // Soma a "força" do sinal neste pixel
+            }
+
+            ctx.lineTo(x, y);
+        }
+
+        ctx.lineTo(centerX + signalWidth, bottomY);
+        ctx.closePath();
+        ctx.fill();
+        
+        // Contorno
+        ctx.strokeStyle = router.color.replace('0.7', '1'); // Cor sólida
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        
+        // Reset composite
+        ctx.globalCompositeOperation = 'source-over';
+    }
+
+    // Desenha o Efeito de Ruído Vermelho onde o sinal passa de 1 (sobreposição)
+    function drawInterference(signalSum) {
+        const h = canvas.height;
+        const bottomY = h - 30;
+        
+        ctx.beginPath();
+        ctx.strokeStyle = 'rgba(239, 68, 68, 0.8)'; // Vermelho alerta
+        ctx.lineWidth = 1;
+
+        let inCollisionZone = false;
+
+        for (let x = 0; x < canvas.width; x++) {
+            // Se a soma das forças no pixel X for maior que um limite crítico (ex: 0.8)
+            // e houver mais de um roteador emitindo ali (soma > 1 seria o ideal, mas 0.8 já mostra os cantos encostando)
+            if (signalSum[x] > 1.1) { 
+                
+                // Desenha "picos" caóticos (estática) subindo do eixo X
+                const staticHeight = Math.random() * 40 + 10; // Altura aleatória do ruído
+                const y = bottomY - staticHeight;
+                
+                if (!inCollisionZone) {
+                    ctx.moveTo(x, bottomY);
+                    inCollisionZone = true;
+                }
+                
+                // Desenha a linha tremida
+                ctx.lineTo(x, y);
+                ctx.lineTo(x, bottomY); // Volta pra base
+            } else {
+                inCollisionZone = false;
+            }
+        }
+        ctx.stroke();
+    }
+
+    // Controla a exibição da caixa de alerta HTML
+    function checkAlert(signalSum) {
+        // Verifica se existe algum ponto no gráfico com alta sobreposição (> 1.1)
+        const isColliding = signalSum.some(val => val > 1.1);
+        
+        if (isColliding) {
+            alertBox.classList.add('active');
+        } else {
+            alertBox.classList.remove('active');
+        }
+    }
+
+    // --- Controles de Interface ---
+
+    document.getElementById('btnAdd').addEventListener('click', () => {
+        const ch = parseInt(document.getElementById('channelSelect').value);
+        
+        // Evita adicionar o exato mesmo canal duas vezes (na vida real seria pior ainda, mas visualmente fica feio)
+        if(routers.some(r => r.channel === ch)) return;
+
+        routers.push({
+            channel: ch,
+            color: colors[colorIndex % colors.length]
+        });
+        colorIndex++;
+    });
+
+    document.getElementById('btnClear').addEventListener('click', () => {
+        routers = [];
+        colorIndex = 0;
+    });
+
+    document.getElementById('btnIdeal').addEventListener('click', () => {
+        routers = [];
+        // Distribuição Ideal: 1, 6 e 11
+        routers.push({ channel: 1, color: colors[0] });
+        routers.push({ channel: 6, color: colors[1] });
+        routers.push({ channel: 11, color: colors[2] });
+    });
+
+    // Inicia a renderização contínua
+    render();
+</script>
+</body>
+</html>

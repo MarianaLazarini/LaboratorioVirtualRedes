@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Simulador de Diafonia</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #1a1a1d; color: #fff; margin: 0; padding: 10px; overflow: hidden; }
+        .page-container { display: flex; flex-direction: column; height: 95vh; gap: 10px; }
+        
+        h1 { font-size: 1.2rem; color: #4da6ff; text-align: center; margin: 0; }
+
+        /* Grid compacta: Controles e Métricas em cima */
+        .top-row { display: grid; grid-template-columns: 1.5fr 1fr; gap: 10px; height: 110px; }
+        
+        .box { background: #2d2d2d; padding: 10px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
+        
+        label { font-size: 0.9rem; font-weight: bold; color: #aaa; }
+        input[type=range] { width: 100%; margin-top: 8px; }
+        
+        .metrics { display: flex; justify-content: space-around; align-items: center; height: 100%; }
+        .metric-item { text-align: center; }
+        .metric-item strong { display: block; font-size: 1.5rem; color: #69f0ae; }
+        .metric-item span { font-size: 0.7rem; color: #888; text-transform: uppercase; }
+
+        /* Área Visual central */
+        .middle-row { height: 120px; background: #111; border-radius: 8px; position: relative; border: 1px solid #444; }
+        canvas#cableCanvas { width: 100%; height: 100%; }
+
+        /* Osciloscópio na parte de baixo ocupando o maior espaço */
+        .bottom-row { flex-grow: 1; background: #000; border-radius: 8px; padding: 10px; border: 1px solid #444; min-height: 200px; position: relative; }
+        canvas#signalChart { width: 100% !important; height: 100% !important; }
+        
+        .chart-label { position: absolute; top: 5px; left: 15px; font-size: 0.8rem; color: #4da6ff; z-index: 5; }
+    </style>
+</head>
+<body>
+<div class="page-container">
+    <h1>Simulador Físico de Diafonia (NEXT)</h1>
+
+    <div class="top-row">
+        <div class="box">
+            <label>Nível de Trançamento: <span id="twistValue" style="color:#4da6ff">0</span></label>
+            <input type="range" id="twistSlider" min="0" max="100" value="0">
+            <div style="display:flex; justify-content: space-between; font-size: 0.7rem; color: #666; margin-top:5px;">
+                <span>Reto</span><span>Cat5e</span><span>Cat6a</span>
+            </div>
+        </div>
+        <div class="box">
+            <div class="metrics">
+                <div class="metric-item">
+                    <span id="statusValue">Crítica</span>
+                    <strong id="integrityValue">10%</strong>
+                    <span>Integridade</span>
+                </div>
+                <div class="metric-item">
+                    <strong id="cancellationValue" style="font-size: 1.1rem; color: #aaa;">Nenhum</strong>
+                    <span>Cancelamento</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="middle-row">
+        <canvas id="cableCanvas"></canvas>
+    </div>
+
+    <div class="bottom-row">
+        <div class="chart-label">Osciloscópio: Sinal no Par Vítima</div>
+        <canvas id="signalChart"></canvas>
+    </div>
+</div>
+
+<script>
+    const slider = document.getElementById('twistSlider');
+    const twistValueDisplay = document.getElementById('twistValue');
+    const integrityDisplay = document.getElementById('integrityValue');
+    const statusDisplay = document.getElementById('statusValue');
+    const cancellationDisplay = document.getElementById('cancellationValue');
+    const cableCanvas = document.getElementById('cableCanvas');
+    const cableCtx = cableCanvas.getContext('2d');
+
+    // Configuração do Gráfico
+    const signalCtx = document.getElementById('signalChart').getContext('2d');
+    let signalChart = new Chart(signalCtx, {
+        type: 'line',
+        data: {
+            labels: Array.from({length: 60}, (_, i) => i),
+            datasets: [{
+                data: [], borderColor: '#ff5252', borderWidth: 2, tension: 0.3, pointRadius: 0
+            }, {
+                data: [], borderColor: 'rgba(255, 255, 255, 0.1)', borderWidth: 1, borderDash: [5, 5], tension: 0.3, pointRadius: 0
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            animation: false,
+            scales: { x: { display: false }, y: { min: -2, max: 2, grid: { color: '#222' }, ticks: { color: '#555' } } },
+            plugins: { legend: { display: false } }
+        }
+    });
+
+    let time = 0;
+
+    function update() {
+        const twist = parseInt(slider.value);
+        twistValueDisplay.textContent = twist;
+        
+        // Lógica de cálculo
+        let integrity = twist === 0 ? 10 : 30 + (70 * (Math.log10(twist * 9 + 1) / 3));
+        integrity -= Math.random() * (10 - twist/10);
+        integrity = Math.max(5, Math.min(100, integrity));
+
+        integrityDisplay.textContent = integrity.toFixed(0) + '%';
+        
+        // Cores e Status
+        if(integrity > 80) { 
+            integrityDisplay.style.color = '#69f0ae'; 
+            statusDisplay.textContent = "PERFEITA"; 
+            cancellationDisplay.textContent = "Total";
+            signalChart.data.datasets[0].borderColor = '#69f0ae';
+        } else if(integrity > 40) {
+            integrityDisplay.style.color = '#ffd740';
+            statusDisplay.textContent = "RUIM";
+            cancellationDisplay.textContent = "Parcial";
+            signalChart.data.datasets[0].borderColor = '#ffd740';
+        } else {
+            integrityDisplay.style.color = '#ff5252';
+            statusDisplay.textContent = "CRÍTICA";
+            cancellationDisplay.textContent = "Nenhum";
+            signalChart.data.datasets[0].borderColor = '#ff5252';
+        }
+
+        // Desenhar Cabos
+        cableCanvas.width = cableCanvas.offsetWidth;
+        cableCanvas.height = cableCanvas.offsetHeight;
+        cableCtx.clearRect(0,0, cableCanvas.width, cableCanvas.height);
+        
+        drawPair(cableCanvas.height * 0.3, twist, '#ff5252', '#ff9800');
+        drawPair(cableCanvas.height * 0.7, twist, '#1976d2', '#64b5f6');
+
+        // Atualizar Onda
+        const noise = (100 - integrity) / 50;
+        const pts = [];
+        const ideal = [];
+        for(let i=0; i<60; i++) {
+            let s = Math.sin(i * 0.2 + time);
+            ideal.push(s);
+            pts.push(s + (Math.random() - 0.5) * noise * 2);
+        }
+        signalChart.data.datasets[0].data = pts;
+        signalChart.data.datasets[1].data = ideal;
+        signalChart.update();
+
+        time += 0.15;
+        requestAnimationFrame(update);
+    }
+
+    function drawPair(y, twist, c1, c2) {
+        const freq = twist * 0.003;
+        const amp = 8;
+        for(let j=0; j<2; j++) {
+            cableCtx.beginPath();
+            cableCtx.strokeStyle = j === 0 ? c1 : c2;
+            cableCtx.lineWidth = 3;
+            for(let x=0; x<cableCanvas.width; x+=5) {
+                let shift = j === 0 ? 0 : Math.PI;
+                let vy = y + Math.sin(x * freq + shift) * amp * (twist > 0 ? 1 : 0);
+                if(twist === 0) vy = j === 0 ? y - 4 : y + 4;
+                if(x===0) cableCtx.moveTo(x, vy); else cableCtx.lineTo(x, vy);
+            }
+            cableCtx.stroke();
+        }
+    }
+
+    update();
+</script>
+</body>
+</html>

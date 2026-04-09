@@ -1,0 +1,135 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Laboratório de Redes Interativo</title>
+    <style>
+        /* Reduzimos a altura total do cabeçalho e menu */
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; background: #f4f4f9; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        
+        /* Cabeçalho Atualizado com Posicionamento */
+        header { 
+            background: #001fa7; 
+            color: white; 
+            padding: 10px 20px; 
+            text-align: center; 
+            position: relative; /* Permite posicionar itens nos cantos */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 40px;
+        }
+        
+        header h1 { margin: 0; font-size: 1.2rem; }
+        
+        /* Canto Superior Esquerdo */
+        .header-left {
+            position: absolute;
+            left: 20px;
+            font-size: 0.85rem;
+            font-weight: bold;
+            letter-spacing: 0.5px;
+        }
+
+        /* Canto Superior Direito (Logo) */
+        .header-right {
+            position: absolute;
+            right: 20px;
+            display: flex;
+            align-items: center;
+        }
+        .header-right img {
+            height: 35px;
+            /* Transforma a logo original em totalmente branca para combinar com o fundo */
+            filter: brightness(0) invert(1); 
+        }
+
+        nav { background: #031079; display: flex; justify-content: center; padding: 5px; gap: 8px; }
+        nav button { 
+            background: none; 
+            border: 1px solid #ecf0f1; 
+            color: #ecf0f1; 
+            padding: 5px 12px; 
+            cursor: pointer; 
+            border-radius: 4px; 
+            font-size: 0.85rem; 
+        }
+        nav button:hover { background: #3498db; }
+        nav button.active { background: #3498db; border-color: #fff; }
+
+        main { flex-grow: 1; padding: 10px; display: flex; justify-content: center; background: #eaeff2; }
+        .simulator-container { width: 100%; max-width: 1200px; background: white; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); overflow: hidden; display: flex; flex-direction: column; }
+        iframe { width: 100%; height: 100%; border: none; flex-grow: 1; }
+
+        /* Rodapé Atualizado com Posicionamento */
+        footer {
+            background: #001fa7; 
+            color: #ecf0f1;
+            padding: 8px 20px;
+            font-size: 0.85rem;
+            position: relative; /* Permite posicionar itens nos cantos */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 25px;
+        }
+
+        /* Canto Inferior Esquerdo */
+        .footer-left {
+            position: absolute;
+            left: 20px;
+            font-weight: bold;
+            color: #aebbf5; /* Um azul mais clarinho para destacar o nome do professor */
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-left">Redes de Computadores 1</div>
+        
+        <h1>Laboratório Virtual de Sinais de Rede: Atenuação, EMI/RFI e Crosstalk</h1>
+        
+        <div class="header-right">
+           <img src="{% static 'images/logo.png' %}" alt="Logo IFSP Birigui">
+        </div>
+    </header>
+
+    <nav id="navMenu">
+        <button onclick="loadSim('{% url "simuladores:espectro" %}', this)">Espectro EMI/RFI</button>
+        <button onclick="loadSim('{% url "simuladores:canais_wifi" %}', this)">Canais Wi-Fi</button>
+        <button onclick="loadSim('{% url "simuladores:atenuacao" %}', this)">Atenuação (Distância)</button>
+        <button onclick="loadSim('{% url "simuladores:mapa_calor" %}', this)">Atenuação (Mapa de calor)</button>
+        <button onclick="loadSim('{% url "simuladores:diafonia" %}', this)">Diafonia (Crosstalk)</button>
+    </nav>
+
+    <main>
+        <div class="simulator-container">
+            <iframe id="simFrame" src="" style="display: none;"></iframe>
+            <div id="welcome" style="text-align:center; padding: 40px; color: #7f8c8d;">
+                <h2>Selecione um simulador no menu acima</h2>
+                <p>Laboratório de Infraestrutura de Redes</p>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <div class="footer-left">Docente: Renato Correia de Barros</div>
+        Feito por Ingrid Alves, Mariana Lazarini e Pedro Batista
+    </footer>
+
+    <script>
+        function loadSim(url, btn) {
+            document.getElementById('welcome').style.display = 'none';
+            const iframe = document.getElementById('simFrame');
+            iframe.style.display = 'block';
+            iframe.src = url;
+
+            // Marcar botão ativo
+            document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        }
+    </script>
+</body>
+</html>

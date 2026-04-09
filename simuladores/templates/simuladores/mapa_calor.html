@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simulador de Cobertura Wi-Fi</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #1a1f2e;
+      color: #e2e8f0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    header {
+      background: #111827;
+      border-bottom: 1px solid #2d3748;
+      padding: 10px 20px;
+      flex-shrink: 0;
+      text-align: center;
+    }
+    header h1 {
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      color: #f1f5f9;
+    }
+
+    .stats-bar {
+      background: #0f172a;
+      border-bottom: 1px solid #1e293b;
+      padding: 7px 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+    .sim-title {
+      font-size: 11px;
+      font-weight: 800;
+      color: #475569;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      flex: 1;
+    }
+    .stat-pill {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background: #1e293b;
+      border: 1px solid #2d3748;
+      border-radius: 8px;
+      padding: 5px 16px;
+      min-width: 105px;
+    }
+    .stat-pill .lbl {
+      font-size: 9px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: #475569;
+    }
+    .stat-pill .val {
+      font-size: 18px;
+      font-weight: 800;
+      color: #f1f5f9;
+      line-height: 1.3;
+    }
+
+    .canvas-wrap {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      cursor: crosshair;
+      min-height: 0;
+    }
+    canvas#wifiCanvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    .room-label {
+      position: absolute;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: rgba(226,232,240,0.45);
+      pointer-events: none;
+      z-index: 5;
+      text-shadow: 0 1px 4px rgba(0,0,0,0.7);
+    }
+
+    .ap-node {
+      position: absolute;
+      width: 46px;
+      height: 46px;
+      transform: translate(-50%, -50%);
+      cursor: grab;
+      z-index: 10;
+      background: rgba(15,23,42,0.92);
+      border: 2px solid #3b82f6;
+      border-radius: 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+      box-shadow: 0 0 14px rgba(59,130,246,0.5), 0 2px 8px rgba(0,0,0,0.6);
+      user-select: none;
+    }
+    .ap-node:active { cursor: grabbing; }
+    .ap-label {
+      font-size: 7px;
+      font-weight: 800;
+      color: #60a5fa;
+      letter-spacing: 0.06em;
+    }
+
+    footer {
+      background: #0f172a;
+      border-top: 1px solid #1e293b;
+      padding: 9px 20px;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      flex-shrink: 0;
+    }
+    .footer-group { display: flex; flex-direction: column; gap: 3px; }
+    .footer-lbl {
+      font-size: 9px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: #475569;
+    }
+    select {
+      background: #1e293b;
+      color: #e2e8f0;
+      border: 1px solid #334155;
+      border-radius: 7px;
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 700;
+      font-family: inherit;
+      cursor: pointer;
+      outline: none;
+    }
+    select:focus { border-color: #3b82f6; }
+
+    .legend-wrap {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+    }
+    .legend-title {
+      font-size: 9px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: #475569;
+    }
+    .legend-bar {
+      width: 160px;
+      height: 10px;
+      border-radius: 5px;
+      background: linear-gradient(to right, #dc2626, #ea580c, #ca8a04, #65a30d, #16a34a);
+    }
+    .legend-labels {
+      display: flex;
+      justify-content: space-between;
+      width: 160px;
+      font-size: 10px;
+      font-weight: 700;
+      color: #64748b;
+      letter-spacing: 0.04em;
+    }
+
+    .btn-reset {
+      background: #1e293b;
+      color: #e2e8f0;
+      border: 1px solid #334155;
+      border-radius: 7px;
+      padding: 7px 18px;
+      font-size: 12px;
+      font-weight: 800;
+      font-family: inherit;
+      cursor: pointer;
+      letter-spacing: 0.05em;
+    }
+    .btn-reset:hover { background: #334155; }
+    .btn-reset:active { transform: scale(0.97); }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>Simulador de Cobertura Wi-Fi</h1>
+  </header>
+
+  <div class="stats-bar">
+    <div class="sim-title">Mapa de Atenuação de Sinal</div>
+    <div class="stat-pill">
+      <span class="lbl">Sinal no cursor</span>
+      <span class="val" id="vSignal">—</span>
+    </div>
+    <div class="stat-pill">
+      <span class="lbl">Qualidade</span>
+      <span class="val" id="vQuality" style="font-size:13px">—</span>
+    </div>
+    <div class="stat-pill">
+      <span class="lbl">Modo atual</span>
+      <span class="val" id="vMode" style="font-size:13px;color:#60a5fa">Drywall</span>
+    </div>
+  </div>
+
+  <div class="canvas-wrap" id="simArea">
+    <canvas id="wifiCanvas"></canvas>
+    <div class="room-label" style="top:12px;left:14px">Sala de Reunião</div>
+    <div class="room-label" style="top:12px;left:52%;transform:translateX(-50%)">Escritório A</div>
+    <div class="room-label" style="top:44%;left:36%;transform:translateY(-50%)">Corredor Central</div>
+    <div class="room-label" style="bottom:12%;right:7%">Escritório B</div>
+    <div class="ap-node" id="apNode">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="#60a5fa">
+        <path d="M12 6c3.31 0 6.18 1.51 8.06 3.88l-1.42 1.42C17.14 9.87 14.73 9 12 9s-5.14.87-6.64 2.31l-1.42-1.42C5.82 7.51 8.69 6 12 6zm0-4c4.42 0 8.44 1.83 11.31 4.77l-1.41 1.41C19.46 5.8 15.93 4 12 4s-7.46 1.8-9.89 4.18L.7 6.77C3.56 3.83 7.58 2 12 2zm0 8c2.21 0 4.11 1.01 5.34 2.58l-1.42 1.41C15.11 13.01 13.63 12.5 12 12.5s-3.11.51-3.92 1.49l-1.42-1.41C7.89 11.01 9.79 10 12 10zm0 4c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2z"/>
+      </svg>
+      <div class="ap-label">ROTEADOR AP</div>
+    </div>
+  </div>
+
+  <footer>
+    <div class="footer-group">
+      <span class="footer-lbl">Material das Paredes</span>
+      <select id="matSelect">
+        <option value="drywall">Drywall (leve)</option>
+        <option value="brick">Tijolo / Concreto (pesado)</option>
+      </select>
+    </div>
+    <div class="legend-wrap">
+      <span class="legend-title">Intensidade do Sinal</span>
+      <div class="legend-bar"></div>
+      <div class="legend-labels"><span>Fraco</span><span>Moderado</span><span>Forte</span></div>
+    </div>
+    <button class="btn-reset" onclick="resetAP()">Resetar AP</button>
+  </footer>
+
+<script>
+  const canvas  = document.getElementById('wifiCanvas');
+  const ctx     = canvas.getContext('2d');
+  const apNode  = document.getElementById('apNode');
+  const simArea = document.getElementById('simArea');
+  const matSel  = document.getElementById('matSelect');
+
+  const LW = 800, LH = 550;
+  let apLX = 400, apLY = 230;
+  let isDragging = false;
+  let canvasW = 0, canvasH = 0;
+
+  const wallSegs = [
+    [300, 0,   300, 180],
+    [300, 180, 550, 180],
+    [300, 300, 550, 300],
+    [550, 180, 550, 380],
+    [300, 300, 300, 550],
+    [550, 380, 800, 380],
+  ];
+
+  function segIntersect(ax,ay,bx,by,cx,cy,dx,dy) {
+    const d1x=bx-ax, d1y=by-ay, d2x=dx-cx, d2y=dy-cy;
+    const det=d1x*d2y-d1y*d2x;
+    if(Math.abs(det)<1e-9) return false;
+    const t=((cx-ax)*d2y-(cy-ay)*d2x)/det;
+    const u=((cx-ax)*d1y-(cy-ay)*d1x)/det;
+    return t>0.01&&t<0.99&&u>0.01&&u<0.99;
+  }
+
+  function wallCount(px,py,tx,ty) {
+    let n=0;
+    for(const [x1,y1,x2,y2] of wallSegs)
+      if(segIntersect(px,py,tx,ty,x1,y1,x2,y2)) n++;
+    return n;
+  }
+
+  function signal(px,py,mat) {
+    const dx=px-apLX, dy=py-apLY;
+    const dist=Math.sqrt(dx*dx+dy*dy);
+    const walls=wallCount(apLX,apLY,px,py);
+    const decay   = mat==='brick' ? 195 : 310;
+    const wallPen = mat==='brick' ? 0.15 : 0.60;
+    return Math.exp(-dist/decay)*Math.pow(wallPen,walls);
+  }
+
+  function lerp(a,b,t){return a+(b-a)*t;}
+
+  function sigColor(s) {
+    const v=Math.min(1,Math.max(0,s));
+    let r,g,b;
+    if(v>0.75){const t=(v-0.75)/0.25;r=Math.round(lerp(80,22,t));g=Math.round(lerp(185,163,t));b=Math.round(lerp(70,74,t));}
+    else if(v>0.5){const t=(v-0.5)/0.25;r=Math.round(lerp(170,80,t));g=Math.round(lerp(205,185,t));b=Math.round(lerp(80,70,t));}
+    else if(v>0.3){const t=(v-0.3)/0.2;r=Math.round(lerp(235,170,t));g=Math.round(lerp(170,205,t));b=Math.round(lerp(60,80,t));}
+    else if(v>0.12){const t=(v-0.12)/0.18;r=Math.round(lerp(245,235,t));g=Math.round(lerp(100,170,t));b=Math.round(lerp(50,60,t));}
+    else{const t=v/0.12;r=Math.round(lerp(180,245,t));g=Math.round(lerp(40,100,t));b=Math.round(lerp(40,50,t));}
+    const a=Math.min(0.80,v*1.15+0.04);
+    return `rgba(${r},${g},${b},${a})`;
+  }
+
+  function syncCanvas() {
+    const dpr=window.devicePixelRatio||1;
+    const dw=simArea.clientWidth, dh=simArea.clientHeight;
+    if(canvas.width!==Math.round(dw*dpr)||canvas.height!==Math.round(dh*dpr)){
+      canvas.width=Math.round(dw*dpr);
+      canvas.height=Math.round(dh*dpr);
+      canvas.style.width=dw+'px';
+      canvas.style.height=dh+'px';
+      ctx.setTransform(dpr,0,0,dpr,0,0);
+    }
+    canvasW=dw; canvasH=dh;
+  }
+
+  function render() {
+    syncCanvas();
+    const mat=matSel.value;
+    const scX=canvasW/LW, scY=canvasH/LH;
+    ctx.clearRect(0,0,canvasW,canvasH);
+
+    const step=8;
+    const cols=Math.ceil(LW/step)+1, rows=Math.ceil(LH/step)+1;
+    const grid=new Float32Array(cols*rows);
+    for(let r=0;r<rows;r++)
+      for(let c=0;c<cols;c++)
+        grid[r*cols+c]=signal(c*step,r*step,mat);
+
+    for(let r=0;r<rows-1;r++){
+      for(let c=0;c<cols-1;c++){
+        const s=grid[r*cols+c];
+        if(s<0.015) continue;
+        ctx.fillStyle=sigColor(s);
+        ctx.fillRect(
+          Math.round(c*step*scX), Math.round(r*step*scY),
+          Math.ceil(step*scX)+1,  Math.ceil(step*scY)+1
+        );
+      }
+    }
+
+    ctx.strokeStyle='#1e293b';
+    ctx.lineWidth=4;
+    ctx.lineCap='square';
+    ctx.beginPath();
+    for(const [x1,y1,x2,y2] of wallSegs){
+      ctx.moveTo(x1*scX,y1*scY);
+      ctx.lineTo(x2*scX,y2*scY);
+    }
+    ctx.stroke();
+
+    apNode.style.left=(apLX*scX)+'px';
+    apNode.style.top =(apLY*scY)+'px';
+
+    const modeEl=document.getElementById('vMode');
+    modeEl.textContent=mat==='brick'?'Concreto':'Drywall';
+    modeEl.style.color=mat==='brick'?'#f87171':'#60a5fa';
+  }
+
+  simArea.addEventListener('mousemove',(e)=>{
+    const rect=simArea.getBoundingClientRect();
+    const lx=(e.clientX-rect.left)/rect.width*LW;
+    const ly=(e.clientY-rect.top)/rect.height*LH;
+    const s=signal(lx,ly,matSel.value);
+    const pct=Math.round(s*100);
+    document.getElementById('vSignal').textContent=pct+'%';
+    const qEl=document.getElementById('vQuality');
+    const q=pct>70?'Excelente':pct>45?'Boa':pct>20?'Fraca':'Sem sinal';
+    qEl.textContent=q;
+    qEl.style.color=pct>70?'#4ade80':pct>45?'#facc15':pct>20?'#fb923c':'#f87171';
+  });
+  simArea.addEventListener('mouseleave',()=>{
+    document.getElementById('vSignal').textContent='—';
+    const qEl=document.getElementById('vQuality');
+    qEl.textContent='—'; qEl.style.color='#f1f5f9';
+  });
+
+  apNode.addEventListener('mousedown',(e)=>{isDragging=true;e.stopPropagation();e.preventDefault();});
+  window.addEventListener('mouseup',()=>isDragging=false);
+  window.addEventListener('mousemove',(e)=>{
+    if(!isDragging) return;
+    const rect=simArea.getBoundingClientRect();
+    apLX=Math.max(10,Math.min(LW-10,(e.clientX-rect.left)/rect.width*LW));
+    apLY=Math.max(10,Math.min(LH-10,(e.clientY-rect.top)/rect.height*LH));
+    render();
+  });
+
+  apNode.addEventListener('touchstart',(e)=>{isDragging=true;e.stopPropagation();e.preventDefault();},{passive:false});
+  window.addEventListener('touchend',()=>isDragging=false);
+  window.addEventListener('touchmove',(e)=>{
+    if(!isDragging) return;
+    const t=e.touches[0];
+    const rect=simArea.getBoundingClientRect();
+    apLX=Math.max(10,Math.min(LW-10,(t.clientX-rect.left)/rect.width*LW));
+    apLY=Math.max(10,Math.min(LH-10,(t.clientY-rect.top)/rect.height*LH));
+    render();
+  },{passive:false});
+
+  function resetAP(){apLX=400;apLY=230;render();}
+  matSel.addEventListener('change',render);
+  window.addEventListener('resize',render);
+  render();
+</script>
+</body>
+</html>
